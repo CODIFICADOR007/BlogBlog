@@ -1,0 +1,153 @@
+import {
+    arrayRemove,
+    arrayUnion,
+    doc,
+    onSnapshot,
+    updateDoc,
+  } from "firebase/firestore";
+  import React, { useEffect, useState } from "react";
+  import { db } from "../firebaseConfig";
+  import { useAuthState } from "react-firebase-hooks/auth";
+  import { v4 as uuidv4 } from "uuid";
+  import { auth } from "./../firebaseConfig";
+  import DeleteCommentButton from "./DeleteCommentButton"; // Import the DeleteCommentButton component
+  
+  export default function Comment({ id }) {
+    const [comment, setComment] = useState("");
+    const [comments, setComments] = useState([]);
+    const [commentLikes, setCommentLikes] = useState({});
+    const [currentlyLoggedinUser] = useAuthState(auth);
+    const commentRef = doc(db, "Articles", id);
+  
+    useEffect(() => {
+      const docRef = doc(db, "Articles", id);
+      onSnapshot(docRef, (snapshot) => {
+        const data = snapshot.data();
+        setComments(data.comments);
+  
+        const initialLikes = {};
+        data.comments.forEach(({ commentId }) => {
+          initialLikes[commentId] = 0;
+        });
+        setCommentLikes(initialLikes);
+      });
+    }, []);
+  
+    const handleChangeComment = (e) => {
+      if (e.key === "Enter") {
+        updateDoc(commentRef, {
+          comments: arrayUnion({
+            user: currentlyLoggedinUser?.uid || null,
+            userName: currentlyLoggedinUser?.displayName || "Anonymous",
+            comment: comment,
+            createdAt: new Date(),
+            commentId: uuidv4(),
+          }),
+        }).then(() => {
+          setComment("");
+        });
+      }
+    };
+  
+    const handleDeleteComment = (commentId, user) => {
+      // Check if the currently logged-in user is the same as the comment's user
+      if (currentlyLoggedinUser?.uid === user) {
+        updateDoc(commentRef, {
+          comments: arrayRemove({ commentId, user }),
+        })
+          .then((e) => {
+            console.log(e);
+          })
+          .catch((error) => {
+            console.log(error);
+          });
+      }
+    };
+  
+    const handleLikeComment = (commentId) => {
+      updateDoc(commentRef, {
+        comments: comments.map((comment) => {
+          if (comment.commentId === commentId) {
+            const newLikes = commentLikes[commentId] + 1;
+            setCommentLikes((prevLikes) => ({
+              ...prevLikes,
+              [commentId]: newLikes,
+            }));
+  
+            return {
+              ...comment,
+              likes: newLikes,
+            };
+          }
+          return comment;
+        }),
+      });
+    };
+  
+    return (
+      <div>
+        Comment
+        <div className="container">
+          {comments !== null &&
+            comments.map(({ commentId, user, comment, userName, createdAt }) => (
+              <div key={commentId}>
+                <div className="border p-2 mt-2 row">
+                  <div className="col-11">
+                    <span
+                      className={`badge ${
+                        user === (currentlyLoggedinUser?.uid || null)
+                          ? "bg-success"
+                          : "bg-primary"
+                      }`}
+                    >
+                      {userName}
+                    </span>
+                    {comment}
+                  </div>
+                  <div className="col-1">
+                    {user === (currentlyLoggedinUser?.uid || null) && (
+                      <>
+                        <i
+                          className="fa fa-times"
+                          style={{ cursor: "pointer" }}
+                          onClick={() => handleDeleteComment(commentId, user)}
+                        ></i>
+                        {" "} {/* Add a space here */}
+                        <span
+                          className="ml-2"
+                          style={{ cursor: "pointer" }}
+                          onClick={() => handleLikeComment(commentId)}
+                        >
+                          <i className="fa fa-thumbs-up"></i>{" "}
+                          {commentLikes[commentId]}
+                        </span>
+  
+                        <DeleteCommentButton
+                          onDelete={() => handleDeleteComment(commentId, user)}
+                        />{" "}
+                        {/* Integrate the DeleteCommentButton */}
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          {currentlyLoggedinUser && (
+            <input
+              type="text"
+              className="form-control mt-4 mb-5"
+              value={comment}
+              onChange={(e) => {
+                setComment(e.target.value);
+              }}
+              placeholder="Add a comment"
+              onKeyUp={(e) => {
+                handleChangeComment(e);
+              }}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+  
