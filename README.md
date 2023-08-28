@@ -1,4 +1,4 @@
-#Before clonning install -> npm, bootstrap, react router-dom, toastify
+# Before clonning install -> npm, bootstrap, react router-dom, toastify
 
 # Getting Started with Create React App
 
